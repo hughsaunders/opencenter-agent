@@ -60,5 +60,6 @@ setup(
     packages=find_packages(),
     data_files=find_files([['opencenteragent/plugins',
                             'share/opencenter-agent/plugins'],
-                           ['opencenter-agent.py', 'bin']])
+                           ['opencenter-agent.py', 'bin']]),
+    requires=['psutil']
 )

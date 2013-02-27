@@ -3,7 +3,9 @@ import fcntl
 import os
 import string
 import threading
-import subprocess32
+import psutil
+import signal
+from opencenteragent.exceptions import BashScriptTimeoutFail
 
 
 def name_mangle(s, prefix=""):
@@ -99,18 +101,34 @@ class BashExec(object):
                  env=None, timeout=None):
         self.env = env
         self.pipe_read, self.pipe_write = os.pipe()
+        self.timer_thread = none
+        self.timeout = timeout
 
-        self.timer_thread = None
-        if timeout is not None:
-            def _wait_seconds(seconds):
-                os.sleep(seconds)
+        def _wait_pid_timeout(timeout, child_pid):
 
-            self.timer_thread = threading.Thread(target=_wait_seconds,
-                                                 args=[timeout])
+            def pid_exists(pid):
+                return pid in [p.pid for p in psutil.get_process_list()]
+
+            for _ in range(timeout):
+                if pid_exists(child_pid):
+                    os.sleep(1)
+                else:
+                    return
+            try:
+                os.kill(child_pid, signal.SIGTERM)
+                if pid_exists(child_pid):
+                    os.kill(child_pid, signal.SIGKILL)
+            except:
+                raise BashScriptTimeoutFail("Can't kill pid %s" % child_pid)
+
         pid = os.fork()
         if pid != 0:
             # parent process
             self.child_pid = pid
+            if self.timeout is not None:
+                self.timer_thread = threading.Thread(target=_wait_pid_timeout,
+                                                     args=[timeout, pid])
+                self.time_thread.start()
             os.close(self.pipe_write)
         else:
             # child process
@@ -127,8 +145,6 @@ class BashExec(object):
             os.dup2(self.pipe_write, 3)
             os.close(self.pipe_write)
             os.execvpe(cmd[0], cmd, env)
-            if self.timer_thread:
-                self.timer_thread.start()
 
     def wait(self, output_variables=None):
         if output_variables is None:

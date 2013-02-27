@@ -50,7 +50,8 @@ Description: an output plugin to run package tasks
 Package: opencenter-agent-lib-bash
 Architecture: all
 Section: python
-Depends: opencenter-agent (= ${binary:Version})
+Depends: opencenter-agent (= ${binary:Version}),
+ python-psutil
 Provides: ${python:Provides}
 Description: libraries necessary for output tasks to do bash-y things
 

@@ -33,3 +33,8 @@ class FileNotFound(Exception):
 class NoConfigFound(Exception):
     """Raised when a config file has no contents."""
     pass
+
+
+class BashScriptTimeoutFail(Exception):
+    """Raised when a bash script times out, but killing the process fails."""
+    pass
