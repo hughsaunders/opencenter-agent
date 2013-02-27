@@ -2,6 +2,8 @@
 import fcntl
 import os
 import string
+import threading
+import subprocess32
 
 
 def name_mangle(s, prefix=""):
@@ -42,11 +44,15 @@ def find_script(script, script_path):
 
 
 class BashScriptRunner(object):
-    def __init__(self, script_path=["scripts"], environment=None, log=None):
+    def __init__(self, script_path=["scripts"],
+                 environment=None,
+                 log=None,
+                 timeout=None):
         self.script_path = script_path
         self.environment = environment or {"PATH":
                                            "/usr/sbin:/usr/bin:/sbin:/bin"}
         self.log = log
+        self.timeout = timeout
 
     def run(self, script, *args):
         return self.run_env(script, {}, "RCB", *args)
@@ -76,7 +82,8 @@ class BashScriptRunner(object):
         c = BashExec(to_run,
                      stdout=fh,
                      stderr=fh,
-                     env=env)
+                     env=env,
+                     timeout=self.timeout)
         response['result_data'] = {"script": path}
         ret_code, outputs = c.wait()
         response['result_data'].update(outputs)
@@ -88,9 +95,18 @@ class BashScriptRunner(object):
 
 
 class BashExec(object):
-    def __init__(self, cmd, stdin=None, stdout=None, stderr=None, env=None):
+    def __init__(self, cmd, stdin=None, stdout=None, stderr=None,
+                 env=None, timeout=None):
         self.env = env
         self.pipe_read, self.pipe_write = os.pipe()
+
+        self.timer_thread = None
+        if timeout is not None:
+            def _wait_seconds(seconds):
+                os.sleep(seconds)
+
+            self.timer_thread = threading.Thread(target=_wait_seconds,
+                                                 args=[timeout])
         pid = os.fork()
         if pid != 0:
             # parent process
@@ -111,6 +127,8 @@ class BashExec(object):
             os.dup2(self.pipe_write, 3)
             os.close(self.pipe_write)
             os.execvpe(cmd[0], cmd, env)
+            if self.timer_thread:
+                self.timer_thread.start()
 
     def wait(self, output_variables=None):
         if output_variables is None:
