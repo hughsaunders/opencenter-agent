@@ -5,7 +5,9 @@ import string
 import threading
 import psutil
 import signal
+import time
 from opencenteragent.exceptions import BashScriptTimeoutFail
+from opencenteragent.exceptions import BashScriptTimeout
 
 
 def name_mangle(s, prefix=""):
@@ -96,6 +98,41 @@ class BashScriptRunner(object):
         return response
 
 
+class BashExecTimer(threading.Thread):
+    RUNNING = 0
+    EXITED = 1
+    KILLED = 2
+    KILL_FAILED = 3
+
+    def __init__(self, timeout, child_pid):
+        super(BashExecTimer, self).__init__()
+        self.timeout = timeout
+        self.pid = child_pid
+        self.status = BashExecTimer.RUNNING
+
+    def pid_exists(self):
+        return self.pid in [p.pid for p in psutil.get_process_list()]
+
+    def run(self, timeout, child_pid):
+
+        for _ in range(timeout):
+            if self.pid_exists():
+                os.sleep(1)
+            else:
+                self.status = BashExecTimer.EXITED
+                return
+        try:
+            os.kill(self.child_pid, signal.SIGTERM)
+            time.sleep(1)
+            if self.pid_exists():
+                os.kill(self.child_pid, signal.SIGKILL)
+        finally:
+            if self.pid_exists():
+                self.status = BashExecTimer.KILL_FAILED
+            else:
+                self.status = BashExecTimer.KILLED
+
+
 class BashExec(object):
     def __init__(self, cmd, stdin=None, stdout=None, stderr=None,
                  env=None, timeout=None):
@@ -103,40 +140,24 @@ class BashExec(object):
         self.pipe_read, self.pipe_write = os.pipe()
         self.timer_thread = none
         self.timeout = timeout
-
-        def _wait_pid_timeout(timeout, child_pid):
-
-            def pid_exists(pid):
-                return pid in [p.pid for p in psutil.get_process_list()]
-
-            for _ in range(timeout):
-                if pid_exists(child_pid):
-                    os.sleep(1)
-                else:
-                    return
-            try:
-                os.kill(child_pid, signal.SIGTERM)
-                if pid_exists(child_pid):
-                    os.kill(child_pid, signal.SIGKILL)
-            except:
-                raise BashScriptTimeoutFail("Can't kill pid %s" % child_pid)
+        self.cmd = cmd
 
         pid = os.fork()
         if pid != 0:
             # parent process
             self.child_pid = pid
+            os.close(self.pipe_write)
             if self.timeout is not None:
                 self.timer_thread = threading.Thread(target=_wait_pid_timeout,
                                                      args=[timeout, pid])
                 self.time_thread.start()
-            os.close(self.pipe_write)
         else:
             # child process
             os.close(self.pipe_read)
             if stdin is None:
                 f = open("/dev/null", "r")
                 stdin = f.fileno()
-            os.dup2(stdin, os.sys.stdin.fileno())
+                os.dup2(stdin, os.sys.stdin.fileno())
             if stdout is not None:
                 os.dup2(stdout, os.sys.stdout.fileno())
             if stderr is not None:
@@ -159,14 +180,19 @@ class BashExec(object):
 
         output_str = ""
         while(True):
-            try:
-                n = os.read(self.pipe_read, 1024)
-            except OSError:  # EWOULDBLOCK/EAGAIN
-                break
+            if self.timer_thread.status == BashExecTimer.RUNNING:
+                try:
+                    n = os.read(self.pipe_read, 1024)
+                except OSError:  # EWOULDBLOCK/EAGAIN
+                    break
 
-            output_str += n
-            if n == "":
-                break
+                output_str += n
+                if n == "":
+                    break
+            elif self.timer_thread.status == BashExecTimer.KILLED:
+                raise BashScriptTimeout()
+            elif self.timer_thread.status == BashExecTimer.KILL_FAILED:
+                raise BashScriptTimeoutFail()
 
         outputs = {"consequences": []}
         if len(output_str) > 0:

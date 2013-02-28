@@ -35,6 +35,10 @@ class NoConfigFound(Exception):
     pass
 
 
+class BashScriptTimeout(Exception):
+    """Raised when a bash script takes too long to run"""
+    pass
+
 class BashScriptTimeoutFail(Exception):
     """Raised when a bash script times out, but killing the process fails."""
     pass
