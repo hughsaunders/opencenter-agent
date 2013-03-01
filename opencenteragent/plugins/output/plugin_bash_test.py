@@ -18,7 +18,7 @@ name = 'bash_test_plugin'
 
 from bashscriptrunner import BashScriptRunner
 import tempfile
-
+import os
 
 def setup(config={}):
     LOG.debug('Doing setup in plugin_bash_test.py')
@@ -38,8 +38,9 @@ def handle_bash_timeout_test(input_data):
                       'top -l %s || top -d 1 -b -n %s' % (iterations,
                                                           iterations))
     script_file.close()
-    script = BashScriptRunner(timeout=timeout)
-    result = script.run(script_file.name)
+    script_path, script_name = os.path.split(script_file.name)
+    script = BashScriptRunner(script_path=[script_path], timeout=timeout)
+    result = script.run(script_name)
 
     return {'result_code': result['result_code'],
             'result_str': result['result_str'],
