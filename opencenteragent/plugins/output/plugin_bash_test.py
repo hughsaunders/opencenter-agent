@@ -29,15 +29,14 @@ def handle_bash_timeout_test(input_data):
     payload = input_data['payload']
     action = input_data['action']
 
-    sleep_time = payload['sleep_time']
+    iterations = payload['iterations']
     timeout = payload['timeout']
 
     print 'Handling action "%s" for payload "%s"' % (action, payload)
     script_file = open(tempfile.mkdtemp(), 'w')
-    script_file.write("""#!/usr/bin/env bash
-                      echo "bash script start, about to sleep.
-                      sleep 600
-                      echo "bash script end, sleep over.""" % sleep_time)
+    script_file.write('#!/usr/bin/env bash'
+                      'top -l %s || top -d 1 -b -n %s' % (iterations,
+                                                          iterations))
     script_file.close()
     script = BashScriptRunner(timeout=timeout)
     result = script.run(script_file.name)
