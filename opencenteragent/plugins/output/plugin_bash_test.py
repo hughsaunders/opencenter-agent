@@ -42,5 +42,5 @@ def handle_bash_timeout_test(input_data):
     result = script.run(script_file.name)
 
     return {'result_code': result['result_code'],
-            'result_str': result['result_string'],
+            'result_str': result['result_str'],
             'result_data': None}
