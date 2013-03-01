@@ -38,7 +38,7 @@ def handle_bash_timeout_test(input_data):
                       'top -l %s || top -d 1 -b -n %s' % (iterations,
                                                           iterations))
     script_file.close()
-    script = BashScriptRunner(timeout=timeout)
+    script = BashScriptRunner(timeout_default=timeout)
     result = script.run(script_file.name)
 
     return {'result_code': result['result_code'],
