@@ -38,14 +38,14 @@ def handle_bash_timeout_test(input_data):
     print 'Handling action "%s" for payload "%s"' % (action, payload)
     script_file = open(tempfile.mktemp(), 'w')
     script_file.write('#!/usr/bin/env bash'
-                      'top -l %s || top -d 1 -b -n %s' % (iterations,
-                                                          iterations))
+                      'time (top -l %s || top -d 1 -b -n %s)'
+                      '>> /tmp/bash_test_log' % (iterations, iterations))
     script_file.close()
     script_path, script_name = os.path.split(script_file.name)
-    script = BashScriptRunner(script_path=[script_path],
-                              timeout=timeout,
-                              log=log)
-    result = script.run(script_name)
+    bsr = BashScriptRunner(script_path=[script_path],
+                           timeout=timeout,
+                           log=log)
+    result = bsr.run(script_name)
 
     return {'result_code': result['result_code'],
             'result_str': result['result_str'],
