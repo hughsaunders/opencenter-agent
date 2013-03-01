@@ -12,15 +12,16 @@ class TestBashScriptRunner(unittest.TestCase):
 
     def test_script_succeed(self):
         try:
-            bsr = BashScriptRunner(timeout=5)
             tmp = open(tempfile.mktemp(), 'w')
-            tmp.write('#!/bin/bash'
+            tmp.write('#! /bin/bash'
                       '\necho -e "test_script_succeed\0\0'
                       'running $(date)\0" '
                       '1>&3')
             tmp.close()
-            ret_code, outputs = bsr.run(tmp.name)
-            print outputs
+            script_path, script_name = os.path.split(tmp.name)
+            bsr = BashScriptRunner(script_path=[script_path], timeout=5)
+            response = bsr.run(script_name)
+            print "response: ", response
         finally:
             try:
                 os.path.remove(tmp.name)
@@ -31,7 +32,7 @@ class TestBashScriptRunner(unittest.TestCase):
         try:
             bsr = BashScriptRunner(timeout=5)
             tmp = open(tempfile.mktemp(), 'w')
-            tmp.write('#!/bin/bash'
+            tmp.write('#! /bin/bash'
                       '\nsleep 120'
                       '\necho -e "test_script_timeout\0\0'
                       'running $(date)\0" 2>&3')
