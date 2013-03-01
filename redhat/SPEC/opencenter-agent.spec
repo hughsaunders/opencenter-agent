@@ -63,6 +63,7 @@ The output plugin for OpenCenter
 %package lib-bash
 Summary: libraries necessary for output tasks to do bash-y things
 Requires: opencenter-agent >= %{version}
+Requires: python-psutil
 Group: System
 
 %description lib-bash
