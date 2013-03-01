@@ -33,7 +33,7 @@ def handle_bash_timeout_test(input_data):
     timeout = payload['timeout']
 
     print 'Handling action "%s" for payload "%s"' % (action, payload)
-    script_file = open(tempfile.mkdtemp(), 'w')
+    script_file = open(tempfile.mktemp(), 'w')
     script_file.write('#!/usr/bin/env bash'
                       'top -l %s || top -d 1 -b -n %s' % (iterations,
                                                           iterations))
