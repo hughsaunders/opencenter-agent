@@ -19,6 +19,8 @@ name = 'bash_test_plugin'
 from bashscriptrunner import BashScriptRunner
 import tempfile
 import os
+import logging
+
 
 def setup(config={}):
     LOG.debug('Doing setup in plugin_bash_test.py')
@@ -26,6 +28,7 @@ def setup(config={}):
 
 
 def handle_bash_timeout_test(input_data):
+    log = logging.getLogger('opencenter.output')
     payload = input_data['payload']
     action = input_data['action']
 
@@ -39,7 +42,9 @@ def handle_bash_timeout_test(input_data):
                                                           iterations))
     script_file.close()
     script_path, script_name = os.path.split(script_file.name)
-    script = BashScriptRunner(script_path=[script_path], timeout=timeout)
+    script = BashScriptRunner(script_path=[script_path],
+                              timeout=timeout,
+                              log=log)
     result = script.run(script_name)
 
     return {'result_code': result['result_code'],
