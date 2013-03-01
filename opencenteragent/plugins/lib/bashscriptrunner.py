@@ -51,17 +51,21 @@ class BashScriptRunner(object):
     def __init__(self, script_path=["scripts"],
                  environment=None,
                  log=None,
-                 timeout=None):
+                 timeout_default=600):
         self.script_path = script_path
         self.environment = environment or {"PATH":
                                            "/usr/sbin:/usr/bin:/sbin:/bin"}
         self.log = log
-        self.timeout = timeout
+        self.timeout_default = timeout_default
 
-    def run(self, script, *args):
-        return self.run_env(script, {}, "RCB", *args)
+    def run(self, script, *args, **kwargs):
+        return self.run_env(script, {}, "RCB", *args, **kwargs)
 
-    def run_env(self, script, environment, prefix, *args):
+    def run_env(self, script, environment, prefix, *args, **kwargs):
+        if 'timeout' in kwargs:
+            timeout = kwargs['timeout']
+        else:
+            timeout = self.timeout_default
         env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"}
         env.update(self.environment)
         env.update(dict([(name_mangle(k, prefix), v)
@@ -87,7 +91,7 @@ class BashScriptRunner(object):
                      stdout=fh,
                      stderr=fh,
                      env=env,
-                     timeout=self.timeout)
+                     timeout=timeout)
         response['result_data'] = {"script": path}
         ret_code, outputs = c.wait()
         response['result_data'].update(outputs)
@@ -99,6 +103,9 @@ class BashScriptRunner(object):
 
 
 class BashExecTimer(threading.Thread):
+    # Exceptions must be raised in the main thread not the timer thread
+    # so these status codes are used to tell the main thread which
+    # exception if any should be raised.
     RUNNING = 0
     EXITED = 1
     KILLED = 2
@@ -110,24 +117,57 @@ class BashExecTimer(threading.Thread):
         self.pid = child_pid
         self.status = BashExecTimer.RUNNING
 
-    def pid_exists(self):
-        return self.pid in [p.pid for p in psutil.get_process_list()]
+    def pid_exists(self, pid=None):
+        if pid is None:
+            pid = self.pid
+        pid_list = [p.pid for p in psutil.get_process_list()]
+        return pid in pid_list
 
-    def run(self, timeout, child_pid):
+    def get_children(self):
+        """the process we forked to run the script, may have created
+        child processes. We must find all of those in order to kill
+        them all if a timeout occurs"""
 
-        for _ in range(timeout):
+        pid_list = psutil.get_process_list()
+
+        child_pids = set([self.pid])
+
+        while True:
+            new_pids = []
+
+            for pid in pid_list:
+                if pid.ppid in child_pids and pid.pid not in child_pids:
+                    new_pids.append(pid.pid)
+
+            child_pids = child_pids.union(new_pids)
+
+            if not new_pids:
+                #no new pids added to the list, break
+                break
+
+        return child_pids
+
+    def run(self):
+
+        for _ in range(self.timeout):
             if self.pid_exists():
-                os.sleep(1)
+                time.sleep(1)
             else:
                 self.status = BashExecTimer.EXITED
                 return
         try:
-            os.kill(self.child_pid, signal.SIGTERM)
+            children = self.get_children()
+
+            for child in children:
+                os.kill(child, signal.SIGTERM)
+
             time.sleep(1)
-            if self.pid_exists():
-                os.kill(self.child_pid, signal.SIGKILL)
+
+            for child in children:
+                if self.pid_exists(child):
+                    os.kill(self.pid, signal.SIGKILL)
         finally:
-            if self.pid_exists():
+            if True in [self.pid_exists(p) for p in children]:
                 self.status = BashExecTimer.KILL_FAILED
             else:
                 self.status = BashExecTimer.KILLED
@@ -135,10 +175,10 @@ class BashExecTimer(threading.Thread):
 
 class BashExec(object):
     def __init__(self, cmd, stdin=None, stdout=None, stderr=None,
-                 env=None, timeout=None):
+                 env=None, timeout=600):
         self.env = env
         self.pipe_read, self.pipe_write = os.pipe()
-        self.timer_thread = none
+        self.timer_thread = None
         self.timeout = timeout
         self.cmd = cmd
 
@@ -146,11 +186,10 @@ class BashExec(object):
         if pid != 0:
             # parent process
             self.child_pid = pid
+            print "child_pid", pid
             os.close(self.pipe_write)
-            if self.timeout is not None:
-                self.timer_thread = threading.Thread(target=_wait_pid_timeout,
-                                                     args=[timeout, pid])
-                self.time_thread.start()
+            self.timer_thread = BashExecTimer(self.timeout, pid)
+            self.timer_thread.start()
         else:
             # child process
             os.close(self.pipe_read)
@@ -179,20 +218,26 @@ class BashExec(object):
         fcntl.fcntl(self.pipe_read, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
         output_str = ""
-        while(True):
-            if self.timer_thread.status == BashExecTimer.RUNNING:
-                try:
-                    n = os.read(self.pipe_read, 1024)
-                except OSError:  # EWOULDBLOCK/EAGAIN
-                    break
+        while True:
+            try:
+                n = os.read(self.pipe_read, 1024)
+            except OSError:  # EWOULDBLOCK/EAGAIN
+                break
 
-                output_str += n
-                if n == "":
-                    break
-            elif self.timer_thread.status == BashExecTimer.KILLED:
-                raise BashScriptTimeout()
-            elif self.timer_thread.status == BashExecTimer.KILL_FAILED:
-                raise BashScriptTimeoutFail()
+            output_str += n
+            if n == "":
+                break
+
+            #break exit loop if we have run out of time.
+            if not self.timer_thread.is_alive():
+                break
+
+        #can't reliably read thread attrs until it has died
+        self.timer_thread.join()
+        if self.timer_thread.status == BashExecTimer.KILLED:
+            raise BashScriptTimeout
+        elif self.timer_thread.status == BashExecTimer.KILL_FAILED:
+            raise BashScriptTimeoutFail
 
         outputs = {"consequences": []}
         if len(output_str) > 0:
