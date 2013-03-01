@@ -15,6 +15,8 @@ trans_log_dir = %(base_dir)s/trans_logs
 log_config = %(base_dir)s/log.cfg
 
 bash_path = %(base_dir)s/opencenteragent/plugins/lib/bash
+# Default timeout for bash scripts, this can be overriden.
+bash_timeout = 600
 
 # pidfile.  Only gets dropped if run as daemon, and with
 # no pidfile specified, no pidfile will be generated

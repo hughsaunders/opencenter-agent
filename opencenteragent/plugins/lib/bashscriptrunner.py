@@ -51,19 +51,31 @@ class BashScriptRunner(object):
     def __init__(self, script_path=["scripts"],
                  environment=None,
                  log=None,
-                 timeout_default=600):
+                 timeout_default=None):
         self.script_path = script_path
         self.environment = environment or {"PATH":
                                            "/usr/sbin:/usr/bin:/sbin:/bin"}
         self.log = log
-        self.timeout_default = timeout_default
+
+        # get a default timeout, first check args, then config file,
+        # then hardcoded value
+        if timeout_default is not None:
+            self.timeout_default = timeout_default
+        elif  'global_config' in globals():
+            global_config = globals()['global_config']
+            if 'bash_timeout' in global_config['main']:
+                self.timeout_default = \
+                    int(global_config['main']['bash_timeout'])
+        else:
+            self.timeout_default = 600
+
 
     def run(self, script, *args, **kwargs):
         return self.run_env(script, {}, "RCB", *args, **kwargs)
 
     def run_env(self, script, environment, prefix, *args, **kwargs):
         if 'timeout' in kwargs:
-            timeout = kwargs['timeout']
+            timeout = int(kwargs['timeout'])
         else:
             timeout = self.timeout_default
         env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"}
