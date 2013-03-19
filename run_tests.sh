@@ -32,6 +32,7 @@ function usage {
   echo "  -f, --force              Force a clean re-build of the virtual environment. Useful when dependencies have been added."
   echo "  -p, --pep8               Just run pep8"
   echo "  -c, --coverage           Generate coverage report"
+  echo "  -I, --no-integration     Don't run integration tests."
   echo "  -H, --html               Generate coverage report html, if -c"
   echo "  -h, --help               Print this usage message"
   echo ""
@@ -50,6 +51,7 @@ function process_option {
     -p|--pep8) just_pep8=1;;
     -c|--coverage) coverage=1;;
     -H|--html) html=1;;
+    -I|--no-integration) integration=false;;
 
     -*) noseopts="$noseopts $1";;
     *) noseargs="$noseargs $1"
@@ -61,6 +63,7 @@ with_venv=tools/with_venv.sh
 always_venv=0
 never_venv=0
 force=0
+integration=true
 #no_site_packages=0
 # installvenvopts=
 noseargs=
@@ -69,7 +72,7 @@ wrapper=""
 just_pep8=0
 coverage=0
 html=0
-
+integration_tmp_dir=.integration_tmp
 
 for arg in "$@"; do
   process_option $arg
@@ -104,6 +107,25 @@ function run_pep8 {
   PEP8_OPTIONS="--exclude=$PEP8_EXCLUDE --repeat --show-pep8 --show-source"
   PEP8_INCLUDE="."
   ${wrapper} pep8 $PEP8_OPTIONS $PEP8_INCLUDE || exit 1
+}
+
+run_integration(){ 
+  trap integration_cleanup INT TERM EXIT
+  pushd $integration_tmp_dir
+    $with_venv curl https://raw.github.com/rcbops/opencenter-install-scripts/sprint/install-dev.sh\
+      | bash -s --role=server --ip=127.0.01  
+    pushd opencenter-agent
+      git pull ../../ sprint 
+      $with_venv python setup.py install
+    popd # agent dir 
+  popd # integration tmp dir
+  trap - INT TERM EXIT
+  # integration_cleanup
+}
+
+integration_cleanup(){
+ [ -d $integration_tmp_dir ] && rm -rf $integration_tmp_dir
+ 
 }
 
 
@@ -154,3 +176,5 @@ if [ $coverage -eq 1 ]; then
     [ $html -eq 1 ] && ${wrapper} coverage html --include='opencenteragent/*' -d coverage -i
     ${wrapper} coverage xml --include='opencenteragent/*' -i
 fi
+
+run_integration
