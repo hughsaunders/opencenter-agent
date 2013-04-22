@@ -61,17 +61,36 @@ class TaskThread(threading.Thread):
         """Handle this node being deleted in the opencenter server."""
 
         message = (
-            'This node was previously registered as %s, however '
+            '\n\n**********\nThis node was previously registered as %s, '
+            'however '
             'that node ID is no longer recognised by the server. '
             'This agent will now exit. If you wish to re-register'
             ' this node with the server, please delete %s and '
-            'restart the agent' % (
+            'restart the agent\n**********\n\n' % (
                 open(self.hostidfile).read(),
                 self.hostidfile
             ))
 
         LOG.error(message)
-        os._exit(1)
+
+        # Quit Task, the agent has a special case for this action string,
+        # and will quit if it is seen. This is better than os._exit() here
+        # as it allows the agent to call cleanup on other plugins.
+        task = {
+            'id': -1,
+            'action': 'opencenter_agent_quit',
+            'payload': {}
+        }
+
+        # Submit a quit task to the agent
+        self.producer_lock.acquire()
+        self.pending_tasks.append(task)
+        self.producer_condition.notify()
+        LOG.debug('added agent quit task to work queue' % task)
+        self.producer_lock.release()
+
+        # Exit the loop in run() next time round.
+        self.stop()
 
     def register(self):
         """Register with the OpenCenter server.

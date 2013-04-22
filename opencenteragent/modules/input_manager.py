@@ -84,6 +84,13 @@ LOG = logging.getLogger('opencenter.input')
 # well as a "result" dict (as returned from the output plugin).  If
 # the plugin has a need to update status, it can do so.
 #
+# Input plugins can request that the agent quits, by submitting a task of
+# the following form:
+# { 'id': -1,
+#   'action': 'opencenter_agent_quit',
+#   'payload': {} }
+
+
 
 
 class InputManager(manager.Manager):

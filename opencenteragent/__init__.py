@@ -376,6 +376,15 @@ class OpenCenterAgent():
                 if len(result) == 0:
                     time.sleep(5)
                 else:
+                    # Special case for quit action, so that input plugins can
+                    # request that the agent quits.
+                    if ('action' in result['input']
+                            and result['input']['action'] ==
+                            'opencenter_agent_quit'):
+                        self.logger.info('Opencenter Agent received quit '
+                                          'action from input plugin %s and '
+                                          'will now quit.' % result['plugin'])
+                        break
                     self.logger.debug('Got input from input handler "%s"'
                                       % (result['plugin']))
                     self.logger.debug('Data: %s' % result['input'])
