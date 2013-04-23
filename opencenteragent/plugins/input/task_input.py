@@ -230,7 +230,6 @@ class TaskThread(threading.Thread):
         return True
 
     def stop(self):
-        self.endpoint = None
         self.running = False
 
     def run(self):
@@ -250,8 +249,10 @@ class TaskThread(threading.Thread):
             except KeyError as e:
                 LOG.error(e)
                 self.node_deleted()
+            except AttributeError:
+                continue
             except KeyboardInterrupt:
-                raise
+                raise KeyboardInterrupt
 
             if task:
                 self.producer_lock.acquire()
